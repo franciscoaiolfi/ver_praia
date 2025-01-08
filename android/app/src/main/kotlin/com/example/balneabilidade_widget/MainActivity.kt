@@ -1,4 +1,4 @@
-package com.example.balneabilidade_widget
+package com.balneabilidade_widget
 
 import io.flutter.embedding.android.FlutterActivity
 
