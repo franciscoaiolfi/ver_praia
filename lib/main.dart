@@ -5,17 +5,19 @@ import 'package:flutter/services.dart';
 import 'dart:math';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:awesome_notifications/awesome_notifications.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
   AwesomeNotifications().initialize(
-    null, 
+    null,
     [
       NotificationChannel(
         channelKey: 'persistent_beach_channel',
         channelName: 'Praias Próximas',
-        channelDescription: 'Notificação persistente com informações da praia mais próxima',
+        channelDescription:
+            'Notificação persistente com informações da praia mais próxima',
         defaultColor: const Color(0xFF9D50DD),
         importance: NotificationImportance.High,
         channelShowBadge: true,
@@ -23,7 +25,7 @@ void main() {
     ],
   );
 
-  runApp(const MyApp());
+  runApp(MaterialApp(home: MyApp()));
 }
 
 class MyApp extends StatefulWidget {
@@ -51,21 +53,22 @@ class _MyAppState extends State<MyApp> {
   }
 
   void _requestPermissions() async {
-  if (!await AwesomeNotifications().isNotificationAllowed()) {
-    await AwesomeNotifications().requestPermissionToSendNotifications();
+    if (!await AwesomeNotifications().isNotificationAllowed()) {
+      await AwesomeNotifications().requestPermissionToSendNotifications();
+    }
+
+    final statusLocationWhenInUse =
+        await Permission.locationWhenInUse.request();
+    final statusLocationAlways = await Permission.locationAlways.request();
+
+    if (statusLocationWhenInUse.isDenied || statusLocationAlways.isDenied) {
+      print('Permissões de localização não concedidas.');
+    }
   }
-
-  final statusLocationWhenInUse = await Permission.locationWhenInUse.request();
-  final statusLocationAlways = await Permission.locationAlways.request();
-
-  if (statusLocationWhenInUse.isDenied || statusLocationAlways.isDenied) {
-    print('Permissões de localização não concedidas.');
-  }
-}
-
 
   Future<void> fetchData() async {
-    final url = Uri.parse('https://balneabilidade.ima.sc.gov.br/relatorio/mapa');
+    final url =
+        Uri.parse('https://balneabilidade.ima.sc.gov.br/relatorio/mapa');
     try {
       final response = await http.get(url);
 
@@ -125,46 +128,43 @@ class _MyAppState extends State<MyApp> {
   }
 
   void _findNearestBeach(double userLat, double userLon) {
-  double minDistance = double.infinity;
-  Map<String, dynamic>? nearestBeach;
+    double minDistance = double.infinity;
+    Map<String, dynamic>? nearestBeach;
 
-  for (final ponto in _data) {
-    final double pontoLat = double.parse(ponto['LATITUDE']);
-    final double pontoLon = double.parse(ponto['LONGITUDE']);
-    final double distance = _haversine(userLat, userLon, pontoLat, pontoLon);
+    for (final ponto in _data) {
+      final double pontoLat = double.parse(ponto['LATITUDE']);
+      final double pontoLon = double.parse(ponto['LONGITUDE']);
+      final double distance = _haversine(userLat, userLon, pontoLat, pontoLon);
 
-    if (distance < minDistance) {
-      minDistance = distance;
-      nearestBeach = ponto;
+      if (distance < minDistance) {
+        minDistance = distance;
+        nearestBeach = ponto;
+      }
+    }
+
+    if (nearestBeach != null && nearestBeach['ANALISES'].isNotEmpty) {
+      final condition = nearestBeach['ANALISES'][0]['CONDICAO'];
+      final beachName = nearestBeach['PONTO_NOME'];
+
+      AwesomeNotifications().createNotification(
+        content: NotificationContent(
+          id: DateTime.now().millisecondsSinceEpoch.remainder(100000),
+          channelKey: 'persistent_beach_channel',
+          title: 'Praia Mais Próxima: $beachName',
+          body:
+              'Condição da água: $condition (Distância: ${minDistance.toStringAsFixed(2)} km)',
+          notificationLayout: NotificationLayout.BigText,
+        ),
+      );
     }
   }
-
-  if (nearestBeach != null && nearestBeach['ANALISES'].isNotEmpty) {
-    final condition = nearestBeach['ANALISES'][0]['CONDICAO'];
-    final beachName = nearestBeach['PONTO_NOME'];
-
-    AwesomeNotifications().createNotification(
-      content: NotificationContent(
-        id: DateTime.now().millisecondsSinceEpoch.remainder(100000),
-        channelKey: 'persistent_beach_channel',
-        title: 'Praia Mais Próxima: $beachName',
-        body: 'Condição da água: $condition (Distância: ${minDistance.toStringAsFixed(2)} km)',
-        notificationLayout: NotificationLayout.BigText,
-      ),
-    );
-  }
-}
-
 
   double _haversine(double lat1, double lon1, double lat2, double lon2) {
     const double R = 6371;
     final double dLat = (lat2 - lat1) * (pi / 180);
     final double dLon = (lon2 - lon1) * (pi / 180);
-    final double a =
-        (1 - cos(dLat)) / 2 +
-        cos(lat1 * (pi / 180)) *
-            cos(lat2 * (pi / 180)) *
-            (1 - cos(dLon)) / 2;
+    final double a = (1 - cos(dLat)) / 2 +
+        cos(lat1 * (pi / 180)) * cos(lat2 * (pi / 180)) * (1 - cos(dLon)) / 2;
     return R * 2 * asin(sqrt(a));
   }
 
@@ -172,6 +172,11 @@ class _MyAppState extends State<MyApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
+      supportedLocales: const [
+        Locale('en', 'US'), // Inglês
+        Locale('pt', 'BR'), // Português (se necessário)
+      ],
       home: Scaffold(
         appBar: AppBar(
           title: const Text('Balneabilidade'),
@@ -182,7 +187,8 @@ class _MyAppState extends State<MyApp> {
               padding: const EdgeInsets.all(8.0),
               child: Text(
                 _locationMessage,
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                style:
+                    const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
             ),
             Expanded(
@@ -199,8 +205,8 @@ class _MyAppState extends State<MyApp> {
                               child: ListTile(
                                 leading: const Icon(Icons.location_on),
                                 title: Text(ponto['PONTO_NOME'] ?? 'Sem nome'),
-                                subtitle: Text(
-                                    ponto['LOCALIZACAO'] ?? 'Local desconhecido'),
+                                subtitle: Text(ponto['LOCALIZACAO'] ??
+                                    'Local desconhecido'),
                                 onTap: () => _showAnalysisDetails(ponto),
                               ),
                             );
@@ -214,32 +220,68 @@ class _MyAppState extends State<MyApp> {
   }
 
   void _showAnalysisDetails(dynamic ponto) {
+    // Garantir que há análises para exibir
+    final analises = ponto['ANALISES'];
+    if (analises == null || analises.isEmpty) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Sem informações'),
+          content: const Text('Nenhuma análise disponível para este ponto.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Fechar'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    // Exibir modal com as análises
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true, // Permitir rolagem no conteúdo
       builder: (BuildContext context) {
-        return ListView(
-          children: [
-            ListTile(
-              title: Text('Ponto: ${ponto['PONTO_NOME']}'),
-              subtitle: Text('Local: ${ponto['LOCALIZACAO']}'),
-            ),
-            const Divider(),
-            ...ponto['ANALISES'].map<Widget>((analise) {
-              return ListTile(
-                leading: Icon(
-                  analise['CONDICAO'] == 'IMPRÓPRIO'
-                      ? Icons.warning
-                      : Icons.check_circle,
-                  color: analise['CONDICAO'] == 'IMPRÓPRIO'
-                      ? Colors.red
-                      : Colors.green,
+        return Container(
+          padding: const EdgeInsets.all(8.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                title: Text('Ponto: ${ponto['PONTO_NOME'] ?? 'Sem nome'}'),
+                subtitle:
+                    Text('Local: ${ponto['LOCALIZACAO'] ?? 'Desconhecido'}'),
+              ),
+              const Divider(),
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: analises.length,
+                  itemBuilder: (context, index) {
+                    final analise = analises[index];
+                    return ListTile(
+                      leading: Icon(
+                        analise['CONDICAO'] == 'IMPRÓPRIO'
+                            ? Icons.warning
+                            : Icons.check_circle,
+                        color: analise['CONDICAO'] == 'IMPRÓPRIO'
+                            ? Colors.red
+                            : Colors.green,
+                      ),
+                      title: Text('Data: ${analise['DATA'] ?? 'Indisponível'}'),
+                      subtitle: Text(
+                        'Condição: ${analise['CONDICAO'] ?? 'Desconhecida'}\n'
+                        'Chuva: ${analise['CHUVA'] ?? 'N/A'}\n'
+                        'Resultado: ${analise['RESULTADO'] ?? 'N/A'}',
+                      ),
+                    );
+                  },
                 ),
-                title: Text('Data: ${analise['DATA']}'),
-                subtitle: Text(
-                    'Condição: ${analise['CONDICAO']}\nChuva: ${analise['CHUVA']}\nResultado: ${analise['RESULTADO']}'),
-              );
-            }).toList(),
-          ],
+              ),
+            ],
+          ),
         );
       },
     );
