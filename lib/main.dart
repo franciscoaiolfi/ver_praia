@@ -67,19 +67,29 @@ class _MyAppState extends State<MyApp> {
     }
   }
 
-  Map<String, List<Map<String, dynamic>>> groupByMunicipality(
-      List<dynamic> data) {
+  Map<String, List<Map<String, dynamic>>> groupByMunicipality(List<dynamic> data) {
     Map<String, List<Map<String, dynamic>>> groupedData = {};
 
     for (var ponto in data) {
-      String cityId = ponto["MUNICIPIO_COD_IBGE"];
-      String cityName = ponto["MUNICIPIO"];
+      String cityId = ponto["MUNICIPIO_COD_IBGE"].toString();
       if (!groupedData.containsKey(cityId)) {
         groupedData[cityId] = [];
       }
       groupedData[cityId]!.add(ponto);
     }
-    return groupedData;
+
+    var sortedGroupedDataEntries = groupedData.entries.toList()
+      ..sort((a, b) {
+        String municipioA = a.value.first['MUNICIPIO'];
+        String municipioB = b.value.first['MUNICIPIO'];
+        return municipioA.compareTo(municipioB);
+      });
+
+    Map<String, List<Map<String, dynamic>>> sortedGroupedData = {
+      for (var entry in sortedGroupedDataEntries) entry.key: entry.value
+    };
+
+    return sortedGroupedData;
   }
 
   Future<void> fetchData() async {
@@ -115,7 +125,7 @@ class _MyAppState extends State<MyApp> {
   Future<void> _startLocationUpdates() async {
     while (true) {
       await _getCurrentLocation();
-      await Future.delayed(const Duration(minutes: 10));
+      await Future.delayed(const Duration(minutes: 1));
     }
   }
 
@@ -148,31 +158,48 @@ class _MyAppState extends State<MyApp> {
   }
 
   void _findNearestBeach(double userLat, double userLon) {
+    // ALTERAR DISTANCIA MINIMA
     double minDistance = double.infinity;
     Map<String, dynamic>? nearestBeach;
 
     for (final ponto in _data) {
-      final double pontoLat = double.parse(ponto['LATITUDE']);
-      final double pontoLon = double.parse(ponto['LONGITUDE']);
-      final double distance = _haversine(userLat, userLon, pontoLat, pontoLon);
+      final analisesProprio = ponto['ANALISES']
+          .where((analise) => analise['CONDICAO'] == 'PRÓPRIO')
+          .toList();
 
-      if (distance < minDistance) {
-        minDistance = distance;
-        nearestBeach = ponto;
+      if (analisesProprio.isEmpty) {
+        final double pontoLat = double.parse(ponto['LATITUDE']);
+        final double pontoLon = double.parse(ponto['LONGITUDE']);
+        final double distance = _haversine(userLat, userLon, pontoLat, pontoLon);
+
+        if (distance < minDistance) {
+          minDistance = distance;
+          nearestBeach = ponto;
+        }
       }
     }
 
-    if (nearestBeach != null && nearestBeach['ANALISES'].isNotEmpty) {
-      final condition = nearestBeach['ANALISES'][0]['CONDICAO'];
-      final beachName = nearestBeach['PONTO_NOME'];
+    if (nearestBeach != null) {
+      final condition = 'PRÓPRIO';
+      final point = nearestBeach['PONTO_NOME'];
+      final beachName = nearestBeach['MUNICIPIO'];
 
       AwesomeNotifications().createNotification(
         content: NotificationContent(
           id: DateTime.now().millisecondsSinceEpoch.remainder(100000),
           channelKey: 'persistent_beach_channel',
-          title: 'Praia Mais Próxima: $beachName',
+          title: 'Praia Mais Próxima: $beachName - $point',
           body:
-              'Condição da água: $condition (Distância: ${minDistance.toStringAsFixed(2)} km)',
+              'Condição da água: Própria para banho (Distância: ${minDistance.toStringAsFixed(2)} km)',
+          notificationLayout: NotificationLayout.BigText,
+        ),
+      );
+    } else {
+      AwesomeNotifications().createNotification(
+        content: NotificationContent(
+          id: DateTime.now().millisecondsSinceEpoch.remainder(100000),
+          channelKey: 'persistent_beach_channel',
+          title: 'Nenhuma praia própria para banho disponível',
           notificationLayout: NotificationLayout.BigText,
         ),
       );
